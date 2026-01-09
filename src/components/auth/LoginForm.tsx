@@ -33,13 +33,24 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
       return;
     }
 
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast({
+        title: "Invalid Email",
+        description: "Please enter a valid email address",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       let result;
       if (isLogin) {
-        console.log('Attempting sign in...');
+        console.log('Attempting sign in for:', email);
         result = await signIn(email, password);
       } else {
-        console.log('Attempting sign up...');
+        console.log('Attempting sign up for:', email);
         result = await signUp(email, password);
       }
       
@@ -57,20 +68,26 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
             title: "Login Successful!",
             description: "Welcome back!",
           });
-          onSuccess();
+          // The onSuccess callback will be called once the auth state changes
+          // But we can also call it directly for better UX
+          setTimeout(() => {
+            onSuccess();
+          }, 500);
         } else {
           toast({
             title: "Sign Up Successful!",
-            description: "You can now sign in with your credentials",
+            description: "Check your email to confirm your account, then you can sign in",
           });
           setIsLogin(true); // Switch to login mode after successful signup
+          setPassword(''); // Clear password field
         }
       }
     } catch (error) {
       console.error('Auth error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
       toast({
         title: "Error",
-        description: "Something went wrong. Please try again.",
+        description: errorMessage,
         variant: "destructive"
       });
     }

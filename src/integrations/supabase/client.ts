@@ -2,8 +2,16 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = "https://kmrfdsccggznmdrefzeq.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttcmZkc2NjZ2d6bm1kcmVmemVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMyNzc1MzMsImV4cCI6MjA2ODg1MzUzM30.JRwkW8ifQdDp1x4pQzMGqjeoZHcFiy6p4qo8E8S-87U";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://kmrfdsccggznmdrefzeq.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImttcmZkc2NjZ2d6bm1kcmVmemVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMyNzc1MzMsImV4cCI6MjA2ODg1MzUzM30.JRwkW8ifQdDp1x4pQzMGqjeoZHcFiy6p4qo8E8S-87U";
+
+// Validate configuration
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  console.error('Supabase credentials are missing. Please check your environment variables.');
+}
+
+console.log('Initializing Supabase with URL:', SUPABASE_URL);
+console.log('Using Anon Key:', SUPABASE_PUBLISHABLE_KEY.substring(0, 20) + '...');
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
@@ -13,5 +21,16 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce',
+  },
+  global: {
+    fetch: (...args) => {
+      console.log('Fetch request to:', args[0]);
+      return fetch(...args).catch(err => {
+        console.error('Fetch failed:', err);
+        throw err;
+      });
+    }
   }
 });

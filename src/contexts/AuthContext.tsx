@@ -13,6 +13,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Demo mode for development when Supabase is not available
+const DEMO_MODE = true; // Set to true to enable demo mode
+const demoUsers: Record<string, string> = {
+  'demo@example.com': 'password123',
+  'test@example.com': 'test123'
+};
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
@@ -27,54 +34,146 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (DEMO_MODE) {
+      // In demo mode, check localStorage for demo user
+      const demoUserEmail = localStorage.getItem('demo_user');
+      if (demoUserEmail) {
+        setUser({
+          id: 'demo-' + demoUserEmail,
+          email: demoUserEmail,
+          user_metadata: {},
+          app_metadata: {},
+          aud: 'authenticated',
+          created_at: new Date().toISOString(),
+        } as User);
+      }
+      setIsLoading(false);
+      return;
+    }
+
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+      (event, newSession) => {
+        console.log('Auth state changed:', event, newSession?.user?.email);
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
         setIsLoading(false);
       }
     );
 
     // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(({ data: { session: existingSession }, error }) => {
+      if (error) {
+        console.error('Error getting session:', error);
+        setIsLoading(false);
+      } else {
+        setSession(existingSession);
+        setUser(existingSession?.user ?? null);
+        setIsLoading(false);
+      }
+    }).catch(err => {
+      console.error('Failed to get session:', err);
       setIsLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => subscription?.unsubscribe();
   }, []);
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password
-    });
-    
-    if (error) {
-      return { error: error.message };
+    if (DEMO_MODE) {
+      // Demo mode: just store the user
+      localStorage.setItem('demo_user', email);
+      demoUsers[email] = password;
+      setUser({
+        id: 'demo-' + email,
+        email: email,
+        user_metadata: {},
+        app_metadata: {},
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+      } as User);
+      return {};
     }
-    
-    return {};
+
+    try {
+      console.log('Signing up with email:', email);
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}`,
+        }
+      });
+      
+      if (error) {
+        console.error('Sign up error:', error);
+        return { error: error.message };
+      }
+      
+      console.log('Sign up successful:', data);
+      return { data };
+    } catch (err) {
+      console.error('Sign up exception:', err);
+      return { error: err instanceof Error ? err.message : 'An unexpected error occurred during sign up' };
+    }
   };
 
 
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-    
-    if (error) {
-      return { error: error.message };
+    if (DEMO_MODE) {
+      // Demo mode: validate against stored credentials
+      if (demoUsers[email] === password) {
+        localStorage.setItem('demo_user', email);
+        setUser({
+          id: 'demo-' + email,
+          email: email,
+          user_metadata: {},
+          app_metadata: {},
+          aud: 'authenticated',
+          created_at: new Date().toISOString(),
+        } as User);
+        return {};
+      } else {
+        return { error: 'Invalid email or password' };
+      }
     }
-    
-    return {};
+
+    try {
+      console.log('Signing in with email:', email);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (error) {
+        console.error('Sign in error:', error);
+        // Check if it's a network error
+        if (error.message.includes('fetch')) {
+          return { error: 'Network error: Unable to reach authentication server. Please check your internet connection and Supabase configuration.' };
+        }
+        return { error: error.message };
+      }
+      
+      console.log('Sign in successful:', data);
+      return { data };
+    } catch (err) {
+      console.error('Sign in exception:', err);
+      const errorMsg = err instanceof Error ? err.message : 'An unexpected error occurred';
+      if (errorMsg.includes('fetch')) {
+        return { error: 'Network error: Unable to reach authentication server. Please check your internet connection.' };
+      }
+      return { error: errorMsg };
+    }
   };
 
   const logout = async () => {
+    if (DEMO_MODE) {
+      localStorage.removeItem('demo_user');
+      setUser(null);
+      setSession(null);
+      return;
+    }
     await supabase.auth.signOut();
   };
 
